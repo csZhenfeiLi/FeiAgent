@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+import os
+import argparse
+from openai import OpenAI
+import sys
+import time
+
+API_KEY = os.getenv('DEEPSEEK_API_KEY')
+BASE_URL = "https://api.deepseek.com"
+
+if not API_KEY:
+    raise ValueError("环境变量DEEPSEEK_API_KEY未设置，请先设置好！")
+
+client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
+
+MODEL_DICT = {
+    'v3': 'deepseek-chat',
+    'r1': 'deepseek-reasoner'
+}
+
+def stream_chat(prompt, model="deepseek-chat"):
+    stream = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant"},
+            {"role": "user", "content": prompt}
+        ],
+        stream=True,
+        temperature=0.5
+    )
+    
+    print(f"\n[{model}]的回复：\n")
+    for chunk in stream:
+        content = chunk.choices[0].delta.content
+        if content:
+            print(content, end='', flush=True)
+            time.sleep(0.01)  # 更流畅的显示效果
+    print("\n")
+
+def show_help():
+    print("""
+FeiAgent 使用帮助：
+
+交互模式：
+    FeiAgent -m [v3|r1]
+
+一次性模式：
+    FeiAgent "你的问题" -m [v3|r1]
+
+管道输入模式：
+    命令 | FeiAgent -m [v3|r1]
+
+命令说明：
+    exit 或 quit : 退出交互模式。
+    help : 显示本帮助信息。
+
+模型参数：
+    v3: DeepSeek-V3 模型（默认）
+    r1: DeepSeek-R1 模型
+""")
+
+def main():
+    parser = argparse.ArgumentParser(description="增强版FeiAgent，支持DeepSeek模型、管道输入及流式输出")
+    parser.add_argument('-m', '--model', type=str, default='v3', choices=['v3', 'r1'],
+                        help='选择模型 (v3: DeepSeek-V3, r1: DeepSeek-R1)')
+    parser.add_argument('prompt', nargs='*', help='直接输入的prompt')
+    args = parser.parse_args()
+
+    selected_model = MODEL_DICT.get(args.model, 'deepseek-chat')
+
+    # 判断是否管道输入
+    if not sys.stdin.isatty():
+        piped_input = sys.stdin.read().strip()
+        prompt = ' '.join(args.prompt) if args.prompt else ''
+        full_prompt = f"{prompt}\n{piped_input}" if prompt else piped_input
+        stream_chat(prompt, model=selected_model)
+        sys.exit(0)
+
+    # 如果提供了一次性问题（prompt），直接返回结果
+    if args.prompt:
+        prompt = ' '.join(args.prompt)
+        stream_chat(prompt, model=selected_model)
+        sys.exit(0)
+
+    # 无参数进入持续对话模式
+    print(f"进入持续交互模式（当前模型: {args.model}），输入 'help' 查看帮助，输入 'exit' 或 'quit' 退出。\n")
+
+    while True:
+        prompt = input("你：").strip()
+        if prompt.lower() in ['exit', 'quit']:
+            print("已退出交互模式。")
+            break
+        elif prompt.lower() == 'help':
+            show_help()
+        elif prompt:
+            stream_chat(prompt, model=selected_model)
+
+if __name__ == '__main__':
+    main()
+
