@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+import os
+import argparse
+from openai import OpenAI
+import sys
+import time
+
+# DeepSeek配置
+API_KEY = os.getenv('DEEPSEEK_API_KEY')
+BASE_URL = "https://api.deepseek.com"
+
+if not API_KEY:
+    raise ValueError("环境变量DEEPSEEK_API_KEY未设置，请先设置好！")
+
+client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
+
+MODEL_DICT = {
+    'v3': 'deepseek-chat',
+    'r1': 'deepseek-reasoner'
+}
+
+def stream_chat(prompt, model="deepseek-chat"):
+    stream = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant"},
+            {"role": "user", "content": prompt}
+        ],
+        stream=True,
+        temperature=0.5
+    )
+    
+    print(f"[{model}]的回复：\n")
+    for chunk in stream:
+        content = chunk.choices[0].delta.content
+        if content:
+            print(content, end='', flush=True)
+            time.sleep(0.02)  # 模拟自然流式效果
+    print("\n")
+
+def show_help():
+    help_message = """
+FeiAgent 互动命令帮助：
+
+- exit 或 quit : 退出交互模式。
+- help : 显示此帮助信息。
+- 当前版本支持模型切换参数：
+    - v3 : 使用 DeepSeek-V3 模型。
+    - r1 : 使用 DeepSeek-R1 模型。
+使用示例：
+    FeiAgent -m v3
+    FeiAgent -m r1
+"""
+    print(help_message)
+
+def main():
+    parser = argparse.ArgumentParser(description="增强版FeiAgent，支持DeepSeek模型切换及流式输出")
+    parser.add_argument('-m', '--model', type=str, default='v3', choices=['v3', 'r1'],
+                        help='选择模型 (v3: DeepSeek-V3, r1: DeepSeek-R1)')
+    args = parser.parse_args()
+
+    selected_model = MODEL_DICT.get(args.model, 'deepseek-chat')
+
+    print(f"进入交互模式，当前模型为[{selected_model}]，输入 'exit' 或 'quit' 退出，输入 'help' 获取帮助。");
+
+    while True:
+        prompt = input("你：")
+        if prompt.lower() in ['exit', 'quit']:
+            print("已退出交互模式。");
+            break
+        elif prompt.lower() == 'help':
+            show_help()
+        else:
+            stream_chat(prompt, model=selected_model)
+
+if __name__ == '__main__':
+    main()
